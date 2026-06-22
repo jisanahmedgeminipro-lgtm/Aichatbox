@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Chatbot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: #e8e8e8; height: 100vh; display: flex; flex-direction: column; }
+
+    .header { background: #141414; border-bottom: 1px solid #222; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+    .header-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #6c63ff, #a78bfa); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .header-title { font-size: 16px; font-weight: 700; color: #fff; }
+    .header-sub { font-size: 12px; color: #666; }
+
+    #messages { flex: 1; overflow-y: auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+    .welcome { text-align: center; padding: 60px 20px; color: #555; }
+    .welcome-icon { font-size: 48px; margin-bottom: 16px; }
+    .welcome h2 { font-size: 22px; font-weight: 700; color: #888; margin-bottom: 8px; }
+    .welcome p { font-size: 14px; }
+
+    .msg-row { display: flex; gap: 12px; max-width: 800px; margin: 0 auto; width: 100%; }
+    .msg-row.user { flex-direction: row-reverse; }
+    .avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; margin-top: 2px; }
+    .avatar.ai { background: linear-gradient(135deg, #6c63ff, #a78bfa); }
+    .avatar.user-av { background: #2a2a2a; }
+
+    .bubble { padding: 12px 16px; border-radius: 14px; font-size: 15px; line-height: 1.65; max-width: calc(100% - 50px); white-space: pre-wrap; }
+    .bubble.ai { background: #1a1a1a; border: 1px solid #2a2a2a; color: #e0e0e0; border-top-left-radius: 4px; }
+    .bubble.user { background: #6c63ff; color: #fff; border-top-right-radius: 4px; }
+
+    .typing { display: flex; gap: 5px; padding: 14px 16px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; border-top-left-radius: 4px; width: fit-content; }
+    .dot { width: 7px; height: 7px; background: #555; border-radius: 50%; animation: bounce 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); background: #6c63ff; } }
+
+    .input-area { background: #141414; border-top: 1px solid #222; padding: 16px; }
+    .input-box { display: flex; gap: 10px; max-width: 800px; margin: 0 auto; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 14px; padding: 10px 10px 10px 16px; align-items: flex-end; transition: border-color 0.2s; }
+    .input-box:focus-within { border-color: #6c63ff; }
+    #user-input { flex: 1; background: none; border: none; outline: none; color: #e8e8e8; font-size: 15px; resize: none; max-height: 140px; line-height: 1.5; font-family: inherit; }
+    #user-input::placeholder { color: #444; }
+    #send-btn { width: 36px; height: 36px; background: #6c63ff; border: none; border-radius: 9px; color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0; }
+    #send-btn:hover { background: #5a52e0; }
+    #send-btn:disabled { background: #333; cursor: not-allowed; }
+    .input-hint { text-align: center; font-size: 11px; color: #444; margin-top: 8px; }
+
+    .error-bubble { background: #1f0a0a; border: 1px solid #3d1515; color: #f87171; padding: 12px 16px; border-radius: 12px; font-size: 14px; max-width: 800px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🤖</div>
+  <div>
+    <div class="header-title">AI Assistant</div>
+    <div class="header-sub">Powered by Claude on AWS Bedrock</div>
+  </div>
+</div>
+
+<div id="messages">
+  <div class="welcome">
+    <div class="welcome-icon">✨</div>
+    <h2>আমি তোমার AI Assistant!</h2>
+    <p>বাংলা বা English — যেকোনো ভাষায় কথা বলো।</p>
+  </div>
+</div>
+
+<div class="input-area">
+  <div class="input-box">
+    <textarea id="user-input" rows="1" placeholder="যেকোনো কিছু জিজ্ঞেস করো..."></textarea>
+    <button id="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+  <div class="input-hint">Enter চাপো পাঠাতে • Shift+Enter নতুন লাইন</div>
+</div>
+
+<script>
+  let conversationHistory = [];
+  let isLoading = false;
+
+  document.getElementById('user-input').addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
+
+  document.getElementById('user-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  function addMessage(role, text) {
+    const messages = document.getElementById('messages');
+    const welcome = messages.querySelector('.welcome');
+    if (welcome) welcome.remove();
+
+    const row = document.createElement('div');
+    row.className = `msg-row ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = `avatar ${role === 'user' ? 'user-av' : 'ai'}`;
+    avatar.textContent = role === 'user' ? '👤' : '🤖';
+
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${role === 'user' ? 'user' : 'ai'}`;
+    bubble.textContent = text;
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function showTyping() {
+    const messages = document.getElementById('messages');
+    const row = document.createElement('div');
+    row.className = 'msg-row'; row.id = 'typing-row';
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar ai'; avatar.textContent = '🤖';
+    const typing = document.createElement('div');
+    typing.className = 'typing';
+    typing.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    row.appendChild(avatar); row.appendChild(typing);
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function removeTyping() { document.getElementById('typing-row')?.remove(); }
+
+  async function sendMessage() {
+    if (isLoading) return;
+    const input = document.getElementById('user-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    document.getElementById('send-btn').disabled = true;
+    isLoading = true;
+
+    addMessage('user', text);
+    conversationHistory.push({ role: 'user', content: text });
+    showTyping();
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: conversationHistory })
+      });
+
+      removeTyping();
+      const data = await response.json();
+
+      if (!response.ok) throw new Error(data.error || 'Server error');
+
+      conversationHistory.push({ role: 'assistant', content: data.reply });
+      addMessage('assistant', data.reply);
+
+    } catch (err) {
+      removeTyping();
+      const messages = document.getElementById('messages');
+      const errDiv = document.createElement('div');
+      errDiv.className = 'error-bubble';
+      errDiv.textContent = '⚠️ Error: ' + err.message;
+      messages.appendChild(errDiv);
+      messages.scrollTop = messages.scrollHeight;
+      conversationHistory.pop();
+    }
+
+    document.getElementById('send-btn').disabled = false;
+    isLoading = false;
+    document.getElementById('user-input').focus();
+  }
+</script>
+</body>
+</html>
